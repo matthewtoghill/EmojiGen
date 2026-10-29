@@ -1,0 +1,64 @@
+{
+  "id": "party-blob",
+  "name": "Party Blob",
+  "shortcode": "party-blob",
+  "description": "Classic bouncy Slack blob grooving with customizable sunglasses, confetti, and rainbow party energy.",
+  "tags": ["blob", "party", "celebrate", "animated", "classic"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Bouncy Slack party blob with sunglasses and confetti",
+  "paramsSchema": {
+    "blobColor": {
+      "type": "color",
+      "label": "Blob Base Color"
+    },
+    "glasses": {
+      "type": "select",
+      "label": "Eyewear Style",
+      "options": [
+        { "label": "Deal With It Shades", "value": "shades" },
+        { "label": "Star Party Glasses", "value": "stars" },
+        { "label": "No Glasses (Cute Eyes)", "value": "none" }
+      ]
+    },
+    "expression": {
+      "type": "select",
+      "label": "Mouth Expression",
+      "options": [
+        { "label": "Big Party Grin", "value": "grin" },
+        { "label": "Cheerful Smile", "value": "smile" },
+        { "label": "Surprised O", "value": "oh" }
+      ]
+    },
+    "bounceAmount": {
+      "type": "number",
+      "label": "Groove Bounce",
+      "min": 0.2,
+      "max": 2.0,
+      "step": 0.1
+    },
+    "showConfetti": {
+      "type": "boolean",
+      "label": "Falling Confetti"
+    },
+    "rainbowCycle": {
+      "type": "boolean",
+      "label": "Built-in Rainbow Cycle"
+    }
+  },
+  "defaultParams": {
+    "blobColor": "#fbbf24",
+    "glasses": "shades",
+    "expression": "grin",
+    "bounceAmount": 1.0,
+    "showConfetti": true,
+    "rainbowCycle": true
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.4,
+    "badgeText": ""
+  }
+}

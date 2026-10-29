@@ -1,0 +1,54 @@
+{
+  "id": "this-is-fine-fire",
+  "name": "Dumpster Fire (This Is Fine)",
+  "shortcode": "this-is-fine",
+  "description": "Animated roaring dumpster fire with multi-layer flickering flames, flying embers, and customizable bin label.",
+  "tags": ["fire", "dumpster", "fine", "incident", "animated", "ops"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Animated dumpster fire emoji with flickering flames and customizable label",
+  "paramsSchema": {
+    "binColor": {
+      "type": "color",
+      "label": "Dumpster Bin Color"
+    },
+    "outerFlameColor": {
+      "type": "color",
+      "label": "Outer Flame Color"
+    },
+    "innerFlameColor": {
+      "type": "color",
+      "label": "Core Flame Color"
+    },
+    "flameHeight": {
+      "type": "number",
+      "label": "Blaze Intensity",
+      "min": 0.5,
+      "max": 1.8,
+      "step": 0.1
+    },
+    "binText": {
+      "type": "text",
+      "label": "Dumpster Stencil Text"
+    },
+    "showEmbers": {
+      "type": "boolean",
+      "label": "Rising Fire Embers"
+    }
+  },
+  "defaultParams": {
+    "binColor": "#15803d",
+    "outerFlameColor": "#ea580c",
+    "innerFlameColor": "#facc15",
+    "flameHeight": 1.2,
+    "binText": "FINE",
+    "showEmbers": true
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.5,
+    "badgeText": ""
+  }
+}

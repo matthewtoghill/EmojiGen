@@ -1,0 +1,54 @@
+{
+  "id": "coffee-intensifies",
+  "name": "Coffee Intensifies",
+  "shortcode": "coffee-intensifies",
+  "description": "Hyper-caffeinated vibrating coffee mug with rising steam waves, electric lightning sparks, and customizable mug text.",
+  "tags": ["coffee", "caffeine", "morning", "intensifies", "animated", "coding"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Hyper-caffeinated vibrating coffee mug emoji with steam and lightning sparks",
+  "paramsSchema": {
+    "mugColor": {
+      "type": "color",
+      "label": "Coffee Mug Color"
+    },
+    "mugText": {
+      "type": "text",
+      "label": "Mug Label Text"
+    },
+    "jitterLevel": {
+      "type": "number",
+      "label": "Caffeine Jitter",
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.1
+    },
+    "showLightning": {
+      "type": "boolean",
+      "label": "Caffeine Lightning Bolts"
+    },
+    "showSteam": {
+      "type": "boolean",
+      "label": "Rising Hot Steam"
+    },
+    "sparkColor": {
+      "type": "color",
+      "label": "Lightning Bolt Color"
+    }
+  },
+  "defaultParams": {
+    "mugColor": "#f43f5e",
+    "mugText": "10X",
+    "jitterLevel": 1.0,
+    "showLightning": true,
+    "showSteam": true,
+    "sparkColor": "#facc15"
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.5,
+    "badgeText": ""
+  }
+}

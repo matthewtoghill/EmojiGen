@@ -1,0 +1,54 @@
+{
+  "id": "panic-button",
+  "name": "Emergency Panic Button",
+  "shortcode": "panic-button",
+  "description": "Animated big red emergency button rapidly slamming down with flashing siren rays and customizable cap text.",
+  "tags": ["panic", "alert", "prod", "emergency", "animated", "button"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Flashing red emergency panic button emoji slamming up and down",
+  "paramsSchema": {
+    "buttonLabel": {
+      "type": "text",
+      "label": "Button Cap Label"
+    },
+    "buttonColor": {
+      "type": "color",
+      "label": "Button Dome Color"
+    },
+    "baseColor": {
+      "type": "color",
+      "label": "Metal Base Color"
+    },
+    "rayColor": {
+      "type": "color",
+      "label": "Alarm Ray Color"
+    },
+    "showAlarmRays": {
+      "type": "boolean",
+      "label": "Flashing Siren Rays"
+    },
+    "pressDepth": {
+      "type": "number",
+      "label": "Slam Depth",
+      "min": 0.3,
+      "max": 1.6,
+      "step": 0.1
+    }
+  },
+  "defaultParams": {
+    "buttonLabel": "PANIC",
+    "buttonColor": "#ef4444",
+    "baseColor": "#facc15",
+    "rayColor": "#fbbf24",
+    "showAlarmRays": true,
+    "pressDepth": 1.0
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.4,
+    "badgeText": ""
+  }
+}

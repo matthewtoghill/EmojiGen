@@ -1,0 +1,54 @@
+{
+  "id": "lgtm-stamp",
+  "name": "LGTM Approval Stamp",
+  "shortcode": "lgtm",
+  "description": "High-contrast approval stamp with customizable label (LGTM, MERGED, +1), ink color, tilt angle, and optional shine sweep.",
+  "tags": ["lgtm", "pr", "code-review", "approved", "stamp", "static"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Bold LGTM stamp emoji for Slack pull request approvals",
+  "paramsSchema": {
+    "stampText": {
+      "type": "text",
+      "label": "Main Stamp Text"
+    },
+    "subText": {
+      "type": "text",
+      "label": "Top/Bottom Ribbon Text"
+    },
+    "inkColor": {
+      "type": "color",
+      "label": "Stamp Ink / Neon Color"
+    },
+    "fillColor": {
+      "type": "color",
+      "label": "Badge Fill Color"
+    },
+    "tiltAngle": {
+      "type": "number",
+      "label": "Stamp Tilt Angle (°)",
+      "min": -25,
+      "max": 25,
+      "step": 1
+    },
+    "animateShine": {
+      "type": "boolean",
+      "label": "Animated Stamp Slam & Shine"
+    }
+  },
+  "defaultParams": {
+    "stampText": "LGTM",
+    "subText": "★ APPROVED ★",
+    "inkColor": "#22c55e",
+    "fillColor": "#052e16",
+    "tiltAngle": -10,
+    "animateShine": true
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 18,
+    "duration": 1.4,
+    "badgeText": ""
+  }
+}

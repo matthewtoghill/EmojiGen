@@ -1,0 +1,59 @@
+{
+  "id": "super-ai-bot",
+  "name": "Super Hero AI Bot",
+  "shortcode": "super-ai-bot",
+  "description": "An AI Bot flying heroically through the sky with a billowing superhero cape and jet thrusters",
+  "prompt": "An AI Bot flying through the sky with a cape acting as a Super Hero",
+  "tags": ["ai", "bot", "robot", "superhero", "flying", "cape", "hero", "animated"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T16:02:39Z",
+  "paramsSchema": {
+    "botColor": {
+      "type": "color",
+      "label": "Bot Armor Color"
+    },
+    "capeColor": {
+      "type": "color",
+      "label": "Hero Cape Color"
+    },
+    "visorColor": {
+      "type": "color",
+      "label": "Visor & Core Glow"
+    },
+    "flightIntensity": {
+      "type": "number",
+      "label": "Flight & Cape Intensity",
+      "min": 0.2,
+      "max": 2.0,
+      "step": 0.1
+    },
+    "expression": {
+      "type": "select",
+      "label": "AI Visor Mode",
+      "options": [
+        { "label": "Heroic Determined", "value": "heroic" },
+        { "label": "Happy & Helpful", "value": "happy" },
+        { "label": "Laser Overdrive", "value": "laser" }
+      ]
+    },
+    "showSkyLines": {
+      "type": "boolean",
+      "label": "Show Sky & Speed Trails"
+    }
+  },
+  "defaultParams": {
+    "botColor": "#38bdf8",
+    "capeColor": "#ef4444",
+    "visorColor": "#fde047",
+    "flightIntensity": 1.0,
+    "expression": "heroic",
+    "showSkyLines": true
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.5,
+    "badgeText": ""
+  }
+}

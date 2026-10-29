@@ -1,0 +1,58 @@
+{
+  "id": "ship-it-rocket",
+  "name": "Ship It Rocket",
+  "shortcode": "ship-it",
+  "description": "Animated rocket blasting into orbit with thrusters, starfield streaks, and customizable hull colors.",
+  "tags": ["deploy", "rocket", "launch", "animated", "ship-it"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T15:40:00Z",
+  "prompt": "Animated ship-it rocket blasting off with stars and thruster flames",
+  "paramsSchema": {
+    "hullColor": {
+      "type": "color",
+      "label": "Rocket Hull Color"
+    },
+    "finColor": {
+      "type": "color",
+      "label": "Fins & Nose Cone Color"
+    },
+    "flameColor": {
+      "type": "color",
+      "label": "Thruster Flame Color"
+    },
+    "thrustPower": {
+      "type": "number",
+      "label": "Thruster Power",
+      "min": 0.4,
+      "max": 2.0,
+      "step": 0.1
+    },
+    "showStars": {
+      "type": "boolean",
+      "label": "Warp Speed Stars"
+    },
+    "windowGlow": {
+      "type": "color",
+      "label": "Porthole Glow"
+    }
+  },
+  "defaultParams": {
+    "hullColor": "#f8fafc",
+    "finColor": "#ef4444",
+    "flameColor": "#f97316",
+    "thrustPower": 1.2,
+    "showStars": true,
+    "windowGlow": "#38bdf8"
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.4,
+    "badgeText": "SHIP IT",
+    "badgeColor": "#ffffff",
+    "badgeBgColor": "#dc2626",
+    "badgeShowPill": true,
+    "badgePosition": "bottom"
+  }
+}
