@@ -1,0 +1,89 @@
+{
+  "id": "text-emoji",
+  "name": "Quick Text Emoji",
+  "shortcode": "text-emoji",
+  "description": "Word-art text emoji (LGTM, +1, nope) with font, weight, gradient fill, outline, die-cut sticker border, GIF-safe hard shadow (drop / 3D extrude / long), line 2 size, letter spacing, auto-fit for one or two lines, and wave / bounce / jitter / shine / marquee / typewriter / rainbow motions. Use Save as Variant to keep each word.",
+  "tags": ["text", "word-art", "label", "animated", "custom"],
+  "animated": true,
+  "author": "local-llm",
+  "createdAt": "2026-10-29T16:00:00Z",
+  "paramsSchema": {
+    "line1": { "type": "text", "label": "Line 1" },
+    "line2": { "type": "text", "label": "Line 2 (optional)" },
+    "font": {
+      "type": "select",
+      "label": "Font",
+      "options": [
+        { "label": "Inter", "value": "'Inter', sans-serif" },
+        { "label": "Impact", "value": "Impact, 'Arial Black', sans-serif" },
+        { "label": "Arial Black", "value": "'Arial Black', 'Inter', sans-serif" },
+        { "label": "Serif", "value": "Georgia, 'Times New Roman', serif" },
+        { "label": "Comic", "value": "'Comic Sans MS', 'Comic Sans', cursive" },
+        { "label": "Mono", "value": "'JetBrains Mono', Consolas, monospace" }
+      ]
+    },
+    "weight": {
+      "type": "select",
+      "label": "Weight",
+      "options": [
+        { "label": "Regular", "value": "400" },
+        { "label": "Bold", "value": "700" },
+        { "label": "Black", "value": "900" }
+      ]
+    },
+    "colorTop": { "type": "color", "label": "Fill Gradient Top" },
+    "colorBottom": { "type": "color", "label": "Fill Gradient Bottom" },
+    "outlineColor": { "type": "color", "label": "Outline Color" },
+    "outlineWidth": { "type": "number", "label": "Outline Width", "min": 0, "max": 8, "step": 0.5 },
+    "stickerColor": { "type": "color", "label": "Sticker Border Color" },
+    "stickerWidth": { "type": "number", "label": "Sticker Border Width (0 = off)", "min": 0, "max": 6, "step": 0.5 },
+    "shadowStyle": {
+      "type": "select",
+      "label": "Shadow Style",
+      "options": [
+        { "label": "None", "value": "none" },
+        { "label": "Drop", "value": "drop" },
+        { "label": "3D Extrude", "value": "extrude" },
+        { "label": "Long Shadow", "value": "long" }
+      ]
+    },
+    "line2Scale": { "type": "number", "label": "Line 2 Size (× Line 1)", "min": 0.4, "max": 1.5, "step": 0.05 },
+    "letterSpacing": { "type": "number", "label": "Letter Spacing (em)", "min": -0.1, "max": 0.3, "step": 0.01 },
+    "textMotion": {
+      "type": "select",
+      "label": "Text Motion",
+      "options": [
+        { "label": "None", "value": "none" },
+        { "label": "Wave", "value": "wave" },
+        { "label": "Bounce", "value": "bounce" },
+        { "label": "Jitter", "value": "jitter" },
+        { "label": "Shine", "value": "shine" },
+        { "label": "Marquee", "value": "marquee" },
+        { "label": "Typewriter", "value": "typewriter" },
+        { "label": "Rainbow", "value": "rainbow" }
+      ]
+    }
+  },
+  "defaultParams": {
+    "line1": "LGTM",
+    "line2": "",
+    "font": "'Inter', sans-serif",
+    "weight": "900",
+    "colorTop": "#fde047",
+    "colorBottom": "#f97316",
+    "outlineColor": "#09090b",
+    "outlineWidth": 4,
+    "stickerColor": "#ffffff",
+    "stickerWidth": 0,
+    "shadowStyle": "drop",
+    "line2Scale": 1,
+    "letterSpacing": 0,
+    "textMotion": "wave"
+  },
+  "modifiers": {
+    "motion": "none",
+    "fps": 20,
+    "duration": 1.2,
+    "badgeText": ""
+  }
+}

@@ -15,6 +15,7 @@ import {
   Moon,
   AlertTriangle,
   X,
+  GitCompare,
 } from 'lucide-react';
 import { loadAllEmojis } from './lib/emojiRegistry';
 import {
@@ -36,17 +37,31 @@ import {
 } from './lib/exporter';
 import { PlaybackClock } from './lib/animationClock';
 import { API_AVAILABLE, apiPost } from './lib/api';
+import {
+  applyEdit,
+  canStep,
+  clearOverrides,
+  isModified,
+  loadStoredEdits,
+  savedModifiers,
+  setOverride,
+  stepEdit,
+  storeEdits,
+  type EmojiEdits,
+  type StudioEdits,
+} from './lib/edits';
 
 interface SidebarEmojiItemProps {
   emoji: LoadedEmoji;
   isSelected: boolean;
+  isModified: boolean;
   params: ParamValues;
   modifiers: UniversalModifiers;
   onSelect: (slug: string) => void;
 }
 
 const SidebarEmojiItem: React.FC<SidebarEmojiItemProps> = React.memo(
-  ({ emoji, isSelected, params, modifiers, onSelect }) => (
+  ({ emoji, isSelected, isModified, params, modifiers, onSelect }) => (
     <button
       type="button"
       onClick={() => onSelect(emoji.slug)}
@@ -68,8 +83,16 @@ const SidebarEmojiItem: React.FC<SidebarEmojiItemProps> = React.memo(
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1">
-          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
             {emoji.manifest.name}
+            {isModified && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"
+                title="Unsaved tweaks"
+                role="img"
+                aria-label="Unsaved tweaks"
+              />
+            )}
           </span>
           {emoji.manifest.animated ? (
             <Film className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
@@ -224,9 +247,22 @@ export const App: React.FC = () => {
     });
   };
 
-  // Per-emoji active parameter & modifier edits
-  const [customParamsBySlug, setCustomParamsBySlug] = useState<Record<string, ParamValues>>({});
-  const [modifiersBySlug, setModifiersBySlug] = useState<Record<string, UniversalModifiers>>({});
+  // Per-emoji unsaved param & modifier overrides (persisted) with undo/redo history
+  const [studioEdits, setStudioEdits] = useState<StudioEdits>(() => ({
+    edits: loadStoredEdits(),
+    history: {},
+  }));
+  const editsBySlug = studioEdits.edits;
+  const [compareSaved, setCompareSaved] = useState(false);
+
+  useEffect(() => {
+    storeEdits(editsBySlug);
+  }, [editsBySlug]);
+
+  const modifiedSlugs = useMemo(
+    () => new Set(emojis.filter((e) => isModified(e, editsBySlug[e.slug])).map((e) => e.slug)),
+    [emojis, editsBySlug]
+  );
 
   // Memoize per-emoji resolved params & modifiers by value so sidebar items
   // keep stable references unless their specific slug's settings change
@@ -235,7 +271,7 @@ export const App: React.FC = () => {
     const nextCache: Record<string, { customRef: ParamValues | undefined; value: ParamValues }> = {};
     const result: Record<string, ParamValues> = {};
     for (const item of emojis) {
-      const customRef = customParamsBySlug[item.slug];
+      const customRef = editsBySlug[item.slug]?.params;
       const prev = resolvedParamsCacheRef.current[item.slug];
       if (prev && prev.customRef === customRef) {
         nextCache[item.slug] = prev;
@@ -250,19 +286,19 @@ export const App: React.FC = () => {
     }
     resolvedParamsCacheRef.current = nextCache;
     return result;
-  }, [emojis, customParamsBySlug]);
+  }, [emojis, editsBySlug]);
 
   const resolvedModifiersCacheRef = useRef<
-    Record<string, { customRef: UniversalModifiers | undefined; value: UniversalModifiers }>
+    Record<string, { customRef: EmojiEdits['modifiers']; value: UniversalModifiers }>
   >({});
   const resolvedModifiersBySlug = useMemo(() => {
     const nextCache: Record<
       string,
-      { customRef: UniversalModifiers | undefined; value: UniversalModifiers }
+      { customRef: EmojiEdits['modifiers']; value: UniversalModifiers }
     > = {};
     const result: Record<string, UniversalModifiers> = {};
     for (const item of emojis) {
-      const customRef = modifiersBySlug[item.slug];
+      const customRef = editsBySlug[item.slug]?.modifiers;
       const prev = resolvedModifiersCacheRef.current[item.slug];
       if (prev && prev.customRef === customRef) {
         nextCache[item.slug] = prev;
@@ -279,7 +315,7 @@ export const App: React.FC = () => {
     }
     resolvedModifiersCacheRef.current = nextCache;
     return result;
-  }, [emojis, modifiersBySlug]);
+  }, [emojis, editsBySlug]);
 
   // Export & Save status
   const [isSaving, setIsSaving] = useState(false);
@@ -326,13 +362,54 @@ export const App: React.FC = () => {
     return resolvedModifiersBySlug[currentEmoji.slug] || DEFAULT_UNIVERSAL_MODIFIERS;
   }, [currentEmoji, resolvedModifiersBySlug]);
 
+  // "Compare with saved" previews the emoji.json defaults instead of the unsaved tweaks
+  const savedEmojiModifiers = useMemo(
+    () => (currentEmoji ? savedModifiers(currentEmoji) : DEFAULT_UNIVERSAL_MODIFIERS),
+    [currentEmoji]
+  );
+  const isCurrentModified = Boolean(currentEmoji && modifiedSlugs.has(currentEmoji.slug));
+  const showSaved = compareSaved && isCurrentModified;
+  const displayParams = showSaved ? currentEmoji!.manifest.defaultParams : activeParams;
+  const displayModifiers = showSaved ? savedEmojiModifiers : activeModifiers;
+
   useEffect(() => {
-    playbackClock.setTiming(activeModifiers.duration, activeModifiers.speed);
-  }, [playbackClock, activeModifiers.duration, activeModifiers.speed]);
+    playbackClock.setTiming(displayModifiers.duration, displayModifiers.speed);
+  }, [playbackClock, displayModifiers.duration, displayModifiers.speed]);
+
+  const currentSlug = currentEmoji?.slug;
+  const handleStep = React.useCallback(
+    (dir: 'undo' | 'redo') => {
+      if (!currentSlug) return;
+      setCompareSaved(false);
+      setStudioEdits((s) => stepEdit(s, currentSlug, dir));
+    },
+    [currentSlug]
+  );
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y; text fields keep their native undo
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const el = e.target as HTMLElement;
+      if (
+        el.tagName === 'TEXTAREA' ||
+        (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'text')
+      ) {
+        return;
+      }
+      e.preventDefault();
+      handleStep(key === 'y' || e.shiftKey ? 'redo' : 'undo');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleStep]);
 
   const handleSelectEmoji = React.useCallback((slug: string) => {
     setSelectedSlug(slug);
     setLastExport(null);
+    setCompareSaved(false);
   }, []);
 
   const handleTogglePlay = React.useCallback(() => {
@@ -381,44 +458,41 @@ export const App: React.FC = () => {
     );
   }
 
-  const handleParamChange = (key: string, value: any) => {
-    setCustomParamsBySlug((prev) => ({
-      ...prev,
-      [currentEmoji.slug]: {
-        ...(prev[currentEmoji.slug] || {}),
-        [key]: value,
-      },
-    }));
+  const commitEdit = (
+    update: (cur: EmojiEdits | undefined) => EmojiEdits | undefined,
+    mergeKey?: string
+  ) => {
+    const slug = currentEmoji.slug;
+    const now = Date.now();
+    setCompareSaved(false);
+    setStudioEdits((s) => applyEdit(s, slug, update, mergeKey, now));
   };
 
-  const handleResetParams = () => {
-    setCustomParamsBySlug((prev) => {
-      const next = { ...prev };
-      delete next[currentEmoji.slug];
-      return next;
-    });
-  };
+  const defaultParams = currentEmoji.manifest.defaultParams;
+
+  const handleParamChange = (key: string, value: any) =>
+    commitEdit((cur) => setOverride(cur, 'params', key, value, defaultParams[key]), `params.${key}`);
+
+  const handleResetParam = (key: string) =>
+    commitEdit((cur) => setOverride(cur, 'params', key, defaultParams[key], defaultParams[key]));
+
+  const handleResetParams = () => commitEdit((cur) => clearOverrides(cur, 'params'));
 
   const handleModifierChange = <K extends keyof UniversalModifiers>(
     key: K,
     value: UniversalModifiers[K]
-  ) => {
-    setModifiersBySlug((prev) => ({
-      ...prev,
-      [currentEmoji.slug]: {
-        ...activeModifiers,
-        [key]: value,
-      },
-    }));
-  };
+  ) =>
+    commitEdit(
+      (cur) => setOverride(cur, 'modifiers', key, value, savedEmojiModifiers[key]),
+      `modifiers.${key}`
+    );
 
-  const handleResetModifiers = () => {
-    setModifiersBySlug((prev) => {
-      const next = { ...prev };
-      delete next[currentEmoji.slug];
-      return next;
-    });
-  };
+  const handleResetModifier = (key: keyof UniversalModifiers) =>
+    commitEdit((cur) =>
+      setOverride(cur, 'modifiers', key, savedEmojiModifiers[key], savedEmojiModifiers[key])
+    );
+
+  const handleResetModifiers = () => commitEdit((cur) => clearOverrides(cur, 'modifiers'));
 
   const handleSaveToDisk = async () => {
     setIsSaving(true);
@@ -568,10 +642,10 @@ export const App: React.FC = () => {
 
   const totalFrames = computeGifTiming(
     getEffectiveDurationSeconds(
-      activeModifiers.duration,
-      activeModifiers.speed
+      displayModifiers.duration,
+      displayModifiers.speed
     ),
-    activeModifiers.fps,
+    displayModifiers.fps,
     36
   ).frames;
 
@@ -710,6 +784,7 @@ export const App: React.FC = () => {
                 key={item.slug}
                 emoji={item}
                 isSelected={item.slug === currentEmoji.slug}
+                isModified={modifiedSlugs.has(item.slug)}
                 params={resolvedParamsBySlug[item.slug] || item.manifest.defaultParams}
                 modifiers={resolvedModifiersBySlug[item.slug] || DEFAULT_UNIVERSAL_MODIFIERS}
                 onSelect={handleSelectEmoji}
@@ -790,19 +865,37 @@ export const App: React.FC = () => {
                 ))}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowGuides((g) => !g)}
-                aria-pressed={showGuides}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
-                  showGuides
-                    ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-600 dark:text-indigo-300'
-                    : 'bg-zinc-100 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                }`}
-              >
-                <Grid className="w-3.5 h-3.5" />
-                128×128 Safe Zone
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCompareSaved((c) => !c)}
+                  disabled={!isCurrentModified}
+                  aria-pressed={showSaved}
+                  title={isCurrentModified ? 'Preview the saved emoji.json defaults' : 'No unsaved tweaks to compare'}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    showSaved
+                      ? 'bg-amber-500/15 border-amber-500 text-amber-700 dark:text-amber-300'
+                      : 'bg-zinc-100 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <GitCompare className="w-3.5 h-3.5" />
+                  {showSaved ? 'Showing Saved' : 'Compare with Saved'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowGuides((g) => !g)}
+                  aria-pressed={showGuides}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
+                    showGuides
+                      ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-600 dark:text-indigo-300'
+                      : 'bg-zinc-100 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <Grid className="w-3.5 h-3.5" />
+                  128×128 Safe Zone
+                </button>
+              </div>
             </div>
 
             {/* Main 240x240 Stage Preview + Actual 128x128 Side-by-Side */}
@@ -813,8 +906,8 @@ export const App: React.FC = () => {
                 >
                   <EmojiCanvas
                     emoji={currentEmoji}
-                    params={activeParams}
-                    modifiers={activeModifiers}
+                    params={displayParams}
+                    modifiers={displayModifiers}
                     size={240}
                     playing={playing}
                     scrubT={scrubT}
@@ -842,8 +935,8 @@ export const App: React.FC = () => {
                 >
                   <EmojiCanvas
                     emoji={currentEmoji}
-                    params={activeParams}
-                    modifiers={activeModifiers}
+                    params={displayParams}
+                    modifiers={displayModifiers}
                     size={128}
                     playing={playing}
                     scrubT={scrubT}
@@ -870,8 +963,8 @@ export const App: React.FC = () => {
           {/* Live Slack Context Simulator */}
           <SlackPreview
             emoji={currentEmoji}
-            params={activeParams}
-            modifiers={activeModifiers}
+            params={displayParams}
+            modifiers={displayModifiers}
             playing={playing}
             scrubT={scrubT}
             clock={playbackClock}
@@ -885,9 +978,15 @@ export const App: React.FC = () => {
           params={activeParams}
           modifiers={activeModifiers}
           onChangeParam={handleParamChange}
+          onResetParam={handleResetParam}
           onResetParams={handleResetParams}
           onChangeModifier={handleModifierChange}
+          onResetModifier={handleResetModifier}
           onResetModifiers={handleResetModifiers}
+          onUndo={() => handleStep('undo')}
+          onRedo={() => handleStep('redo')}
+          canUndo={canStep(studioEdits, currentEmoji.slug, 'undo')}
+          canRedo={canStep(studioEdits, currentEmoji.slug, 'redo')}
           onSaveToDisk={handleSaveToDisk}
           onDuplicateVariant={handleDuplicateVariant}
           onExportGif={handleExportGif}

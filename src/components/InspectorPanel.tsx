@@ -13,6 +13,8 @@ import {
   Sparkles,
   FileCheck,
   Loader2,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import {
   type LoadedEmoji,
@@ -24,18 +26,25 @@ import {
 import type { ExportResult } from '../lib/exporter';
 import { API_AVAILABLE } from '../lib/api';
 import { slugify } from '../lib/slug';
+import { savedModifiers } from '../lib/edits';
 
 interface InspectorPanelProps {
   emoji: LoadedEmoji;
   params: ParamValues;
   modifiers: UniversalModifiers;
   onChangeParam: (key: string, value: any) => void;
+  onResetParam: (key: string) => void;
   onResetParams: () => void;
   onChangeModifier: <K extends keyof UniversalModifiers>(
     key: K,
     value: UniversalModifiers[K]
   ) => void;
+  onResetModifier: (key: keyof UniversalModifiers) => void;
   onResetModifiers: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   onSaveToDisk: () => Promise<void>;
   onDuplicateVariant: (newSlug: string, newName: string) => Promise<string>;
   onExportGif: () => Promise<void>;
@@ -59,6 +68,20 @@ const MOTION_PRESETS: Array<{ id: UniversalMotionType; label: string; badge: str
 
 const QUICK_BADGES = ['', 'LGTM', 'SHIP IT', 'WIP', 'HOTFIX', 'PR', 'YES', 'NOPE', 'RIP'];
 
+// Rendered only when a reset handler is given, i.e. the setting differs from its default
+const ResetButton: React.FC<{ label: string; onReset?: () => void }> = ({ label, onReset }) =>
+  onReset ? (
+    <button
+      type="button"
+      onClick={onReset}
+      title={`Reset ${label} to default`}
+      aria-label={`Reset ${label} to default`}
+      className="p-0.5 rounded text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer shrink-0"
+    >
+      <RotateCcw className="w-3 h-3" />
+    </button>
+  ) : null;
+
 interface FxSliderProps {
   label: string;
   display: string;
@@ -67,15 +90,19 @@ interface FxSliderProps {
   step: number;
   value: number;
   onChange: (value: number) => void;
+  onReset?: () => void;
 }
 
-const FxSlider: React.FC<FxSliderProps> = ({ label, display, min, max, step, value, onChange }) => {
+const FxSlider: React.FC<FxSliderProps> = ({ label, display, min, max, step, value, onChange, onReset }) => {
   const id = useId();
   return (
     <div>
       <div className="flex justify-between text-xs mb-1">
         <label htmlFor={id} className="text-zinc-600 dark:text-zinc-400">{label}</label>
-        <span className="font-mono text-indigo-600 dark:text-indigo-400">{display}</span>
+        <span className="flex items-center gap-1">
+          <span className="font-mono text-indigo-600 dark:text-indigo-400">{display}</span>
+          <ResetButton label={label} onReset={onReset} />
+        </span>
       </div>
       <input
         id={id}
@@ -96,9 +123,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   params,
   modifiers,
   onChangeParam,
+  onResetParam,
   onResetParams,
   onChangeModifier,
+  onResetModifier,
   onResetModifiers,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   onSaveToDisk,
   onDuplicateVariant,
   onExportGif,
@@ -118,6 +151,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   const schemaEntries = Object.entries(emoji.manifest.paramsSchema || {});
   // Static artwork with no motion wrapper: a GIF would just repeat one frame
   const isStatic = !emoji.manifest.animated && modifiers.motion === 'none';
+
+  // Reset handlers, defined only for settings that differ from the saved emoji.json
+  const savedMods = savedModifiers(emoji);
+  const paramReset = (key: string) =>
+    params[key] !== emoji.manifest.defaultParams[key] ? () => onResetParam(key) : undefined;
+  const modReset = (key: keyof UniversalModifiers) =>
+    modifiers[key] !== savedMods[key] ? () => onResetModifier(key) : undefined;
 
   const handleSave = async () => {
     setSaveError(null);
@@ -346,7 +386,10 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               <div className="space-y-4 bg-zinc-50/80 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-3.5">
                 {schemaEntries.map(([key, def]) => (
                   <div key={key} className="pb-3 last:pb-0 border-b last:border-b-0 border-zinc-200/80 dark:border-zinc-800/60">
-                    {renderParamInput(key, def)}
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 min-w-0">{renderParamInput(key, def)}</div>
+                      <ResetButton label={def.label} onReset={paramReset(key)} />
+                    </div>
                     {def.description && (
                       <p className="text-[10px] text-zinc-500 mt-1">{def.description}</p>
                     )}
@@ -429,9 +472,12 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
             {/* Motion Wrapper */}
             <div className="bg-zinc-50/80 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-3.5 space-y-3">
-              <h4 className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                Motion Wrapper Preset
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Motion Wrapper Preset
+                </h4>
+                <ResetButton label="Motion Wrapper Preset" onReset={modReset('motion')} />
+              </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {MOTION_PRESETS.map((preset) => (
                   <button
@@ -463,6 +509,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                     step={0.1}
                     value={modifiers.motionIntensity}
                     onChange={(v) => onChangeModifier('motionIntensity', v)}
+                    onReset={modReset('motionIntensity')}
                   />
                 </div>
               )}
@@ -473,30 +520,36 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               <label htmlFor={`${idPrefix}-badge-fx`} className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                 Badge Text & Styling
               </label>
-              <input
-                id={`${idPrefix}-badge-fx`}
-                type="text"
-                placeholder="Overlay text (e.g. LGTM, SHIP IT)"
-                value={modifiers.badgeText}
-                onChange={(e) => onChangeModifier('badgeText', e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-900 dark:text-zinc-100"
-              />
-              <div className="grid grid-cols-3 gap-1.5">
-                {(['top', 'center', 'bottom'] as const).map((pos) => (
-                  <button
-                    key={pos}
-                    type="button"
-                    onClick={() => onChangeModifier('badgePosition', pos)}
-                    aria-pressed={modifiers.badgePosition === pos}
-                    className={`py-1 rounded-lg text-xs capitalize border cursor-pointer ${
-                      modifiers.badgePosition === pos
-                        ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
-                        : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
-                    }`}
-                  >
-                    {pos}
-                  </button>
-                ))}
+              <div className="flex items-center gap-1.5">
+                <input
+                  id={`${idPrefix}-badge-fx`}
+                  type="text"
+                  placeholder="Overlay text (e.g. LGTM, SHIP IT)"
+                  value={modifiers.badgeText}
+                  onChange={(e) => onChangeModifier('badgeText', e.target.value)}
+                  className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-900 dark:text-zinc-100"
+                />
+                <ResetButton label="Badge Text" onReset={modReset('badgeText')} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1 grid grid-cols-3 gap-1.5">
+                  {(['top', 'center', 'bottom'] as const).map((pos) => (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => onChangeModifier('badgePosition', pos)}
+                      aria-pressed={modifiers.badgePosition === pos}
+                      className={`py-1 rounded-lg text-xs capitalize border cursor-pointer ${
+                        modifiers.badgePosition === pos
+                          ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+                      }`}
+                    >
+                      {pos}
+                    </button>
+                  ))}
+                </div>
+                <ResetButton label="Badge Position" onReset={modReset('badgePosition')} />
               </div>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -508,6 +561,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                     onChange={(e) => onChangeModifier('badgeColor', e.target.value)}
                     className="w-6 h-6 rounded border border-zinc-300 dark:border-zinc-700 cursor-pointer"
                   />
+                  <ResetButton label="Badge Text Color" onReset={modReset('badgeColor')} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-zinc-600 dark:text-zinc-400">Pill/Stroke</span>
@@ -518,18 +572,22 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                     onChange={(e) => onChangeModifier('badgeBgColor', e.target.value)}
                     className="w-6 h-6 rounded border border-zinc-300 dark:border-zinc-700 cursor-pointer"
                   />
+                  <ResetButton label="Badge Pill/Stroke Color" onReset={modReset('badgeBgColor')} />
                 </div>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={modifiers.badgeShowPill}
-                    onChange={(e) =>
-                      onChangeModifier('badgeShowPill', e.target.checked)
-                    }
-                    className="accent-indigo-500"
-                  />
-                  Pill BG
-                </label>
+                <div className="flex items-center gap-1">
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={modifiers.badgeShowPill}
+                      onChange={(e) =>
+                        onChangeModifier('badgeShowPill', e.target.checked)
+                      }
+                      className="accent-indigo-500"
+                    />
+                    Pill BG
+                  </label>
+                  <ResetButton label="Pill BG" onReset={modReset('badgeShowPill')} />
+                </div>
               </div>
               <FxSlider
                 label="Badge Size"
@@ -539,6 +597,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={0.05}
                 value={modifiers.badgeScale}
                 onChange={(v) => onChangeModifier('badgeScale', v)}
+                onReset={modReset('badgeScale')}
               />
             </div>
 
@@ -556,6 +615,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={0.1}
                 value={modifiers.duration}
                 onChange={(v) => onChangeModifier('duration', v)}
+                onReset={modReset('duration')}
               />
 
               <FxSlider
@@ -566,6 +626,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={0.05}
                 value={modifiers.speed}
                 onChange={(v) => onChangeModifier('speed', v)}
+                onReset={modReset('speed')}
               />
 
               <FxSlider
@@ -576,6 +637,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={2}
                 value={modifiers.fps}
                 onChange={(v) => onChangeModifier('fps', v)}
+                onReset={modReset('fps')}
               />
 
               <FxSlider
@@ -586,6 +648,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={0.05}
                 value={modifiers.scale}
                 onChange={(v) => onChangeModifier('scale', v)}
+                onReset={modReset('scale')}
               />
 
               <FxSlider
@@ -596,35 +659,42 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={5}
                 value={modifiers.rotation}
                 onChange={(v) => onChangeModifier('rotation', v)}
+                onReset={modReset('rotation')}
               />
 
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => onChangeModifier('flipX', !modifiers.flipX)}
-                  aria-pressed={modifiers.flipX}
-                  className={`py-1.5 px-2.5 rounded-lg border text-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                    modifiers.flipX
-                      ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
-                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
-                  }`}
-                >
-                  <FlipHorizontal className="w-3.5 h-3.5" />
-                  Flip Horizontal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChangeModifier('flipY', !modifiers.flipY)}
-                  aria-pressed={modifiers.flipY}
-                  className={`py-1.5 px-2.5 rounded-lg border text-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                    modifiers.flipY
-                      ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
-                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
-                  }`}
-                >
-                  <FlipVertical className="w-3.5 h-3.5" />
-                  Flip Vertical
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onChangeModifier('flipX', !modifiers.flipX)}
+                    aria-pressed={modifiers.flipX}
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-xs flex items-center justify-center gap-1.5 cursor-pointer ${
+                      modifiers.flipX
+                        ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                        : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    <FlipHorizontal className="w-3.5 h-3.5" />
+                    Flip Horizontal
+                  </button>
+                  <ResetButton label="Flip Horizontal" onReset={modReset('flipX')} />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onChangeModifier('flipY', !modifiers.flipY)}
+                    aria-pressed={modifiers.flipY}
+                    className={`flex-1 py-1.5 px-2.5 rounded-lg border text-xs flex items-center justify-center gap-1.5 cursor-pointer ${
+                      modifiers.flipY
+                        ? 'bg-indigo-600/15 dark:bg-indigo-600/20 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                        : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    <FlipVertical className="w-3.5 h-3.5" />
+                    Flip Vertical
+                  </button>
+                  <ResetButton label="Flip Vertical" onReset={modReset('flipY')} />
+                </div>
               </div>
             </div>
 
@@ -642,6 +712,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={5}
                 value={modifiers.hueRotate}
                 onChange={(v) => onChangeModifier('hueRotate', v)}
+                onReset={modReset('hueRotate')}
               />
 
               <FxSlider
@@ -652,6 +723,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={5}
                 value={modifiers.saturate}
                 onChange={(v) => onChangeModifier('saturate', v)}
+                onReset={modReset('saturate')}
               />
 
               <FxSlider
@@ -662,6 +734,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={5}
                 value={modifiers.brightness}
                 onChange={(v) => onChangeModifier('brightness', v)}
+                onReset={modReset('brightness')}
               />
 
               <FxSlider
@@ -672,9 +745,10 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 step={5}
                 value={modifiers.contrast}
                 onChange={(v) => onChangeModifier('contrast', v)}
+                onReset={modReset('contrast')}
               />
 
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-1.5 pt-1">
                 <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
                   <input
                     type="checkbox"
@@ -686,16 +760,20 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                   />
                   Solid Background Tile
                 </label>
+                <ResetButton label="Solid Background Tile" onReset={modReset('backgroundTransparent')} />
                 {!modifiers.backgroundTransparent && (
-                  <input
-                    type="color"
-                    value={modifiers.backgroundColor}
-                    aria-label="Background color"
-                    onChange={(e) =>
-                      onChangeModifier('backgroundColor', e.target.value)
-                    }
-                    className="w-6 h-6 rounded border border-zinc-300 dark:border-zinc-700 cursor-pointer"
-                  />
+                  <div className="flex items-center gap-1 ml-auto">
+                    <input
+                      type="color"
+                      value={modifiers.backgroundColor}
+                      aria-label="Background color"
+                      onChange={(e) =>
+                        onChangeModifier('backgroundColor', e.target.value)
+                      }
+                      className="w-6 h-6 rounded border border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                    />
+                    <ResetButton label="Background Color" onReset={modReset('backgroundColor')} />
+                  </div>
                 )}
               </div>
 
@@ -708,6 +786,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                   step={2}
                   value={modifiers.backgroundRadius}
                   onChange={(v) => onChangeModifier('backgroundRadius', v)}
+                  onReset={modReset('backgroundRadius')}
                 />
               )}
             </div>
@@ -916,6 +995,24 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
       {/* Persistent Bottom Quick-Action Bar */}
       <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-950/90 flex items-center gap-2">
+        {(
+          [
+            { label: 'Undo (Ctrl+Z)', Icon: Undo2, onClick: onUndo, enabled: canUndo },
+            { label: 'Redo (Ctrl+Shift+Z)', Icon: Redo2, onClick: onRedo, enabled: canRedo },
+          ] as const
+        ).map(({ label, Icon, onClick, enabled }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={onClick}
+            disabled={!enabled}
+            title={label}
+            aria-label={label}
+            className="p-2 rounded-xl bg-zinc-200/80 hover:bg-zinc-300/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Icon className="w-3.5 h-3.5" />
+          </button>
+        ))}
         {API_AVAILABLE && (
           <button
             type="button"

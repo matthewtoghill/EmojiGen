@@ -40,13 +40,13 @@ The Slack simulator draws the vector artwork live. The real GIF looks different:
   - **File size:** a live estimate against the 128 KB limit.
 - These checks put the rules in AGENTS.md into the app, so human users get them too, not only the LLM.
 
-### 3. Undo/redo, saved sessions, and shareable links
+### ✅ 3. Undo/redo, saved sessions, and shareable links *(Completed except shareable links: `src/lib/edits.ts`)*
 - All tweaks live in React state, so a refresh loses unsaved work. Store `customParamsBySlug` and `modifiersBySlug` in `localStorage`.
 - Add an undo/redo stack (Ctrl+Z / Ctrl+Shift+Z).
 - Put the selected emoji, params, and modifiers in the URL hash so a link reproduces the exact variant.
 - Add a "modified" dot in the sidebar and a "Compare with saved" toggle.
 
-### 4. Quick text-emoji maker
+### ✅ 4. Quick text-emoji maker *(Completed: built-in `emojis/text-emoji/`)*
 Text emojis ("LGTM", "+1", "nope") are the most common custom Slack emojis. Add one built-in parametric text renderer with:
 - Font, weight, gradient fill, outline, and a drop shadow that still works with GIF transparency.
 - Automatic fitting for one or two lines.
