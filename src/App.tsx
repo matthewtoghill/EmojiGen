@@ -18,7 +18,7 @@ import {
   GitCompare,
 } from 'lucide-react';
 import { loadAllEmojis } from './lib/emojiRegistry';
-import { decodeRasterImage, loadRasterImage, type RasterImage } from './lib/renderer';
+import { loadRasterImage, type RasterImage } from './lib/renderer';
 import {
   DEFAULT_UNIVERSAL_MODIFIERS,
   type LoadedEmoji,
@@ -29,6 +29,7 @@ import { EmojiCanvas } from './components/EmojiCanvas';
 import { SlackPreview } from './components/SlackPreview';
 import { InspectorPanel } from './components/InspectorPanel';
 import { LlmPromptModal } from './components/LlmPromptModal';
+import { ImportImageDialog } from './components/ImportImageDialog';
 import {
   computeGifTiming,
   exportEmojiToGif,
@@ -327,6 +328,7 @@ export const App: React.FC = () => {
   const [isLlmModalOpen, setIsLlmModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [rasterImgElement, setRasterImgElement] = useState<RasterImage | null>(null);
 
   const currentEmoji: LoadedEmoji | undefined = useMemo(
@@ -600,44 +602,12 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRasterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRasterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     setAppError(null);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const dataUrl = String(reader.result || '');
-        const baseName = file.name.replace(/\.[^.]+$/, '');
-        const ext = file.name.split('.').pop() || 'png';
-        // Animated GIF/WebP/APNG: keep the source loop length and frame rate
-        const objectUrl = URL.createObjectURL(file);
-        const raster = await decodeRasterImage(objectUrl).finally(() => URL.revokeObjectURL(objectUrl));
-        const frameCount = raster.frames.length;
-        const durationSec = raster.ends[frameCount - 1] / 1000;
-        const animated = frameCount > 1;
-        const data = await apiPost<{ slug: string }>('/api/emojis/import-raster', {
-          name: baseName,
-          slug: baseName,
-          ext,
-          dataUrl,
-          animated,
-          modifiers: animated
-            ? {
-                duration: Math.round(durationSec * 100) / 100,
-                fps: Math.max(8, Math.min(30, Math.round(frameCount / durationSec))),
-              }
-            : undefined,
-        });
-        setSelectedSlug(data.slug);
-        setLastExport(null);
-      } catch (err: any) {
-        setAppError(`Image import failed: ${err?.message || err}`);
-      }
-    };
-    reader.onerror = () => setAppError('Image import failed: could not read the file');
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    setPendingImportFile(file);
   };
 
   const canvasBgClass =
@@ -1016,6 +986,17 @@ export const App: React.FC = () => {
         onClose={() => setIsLlmModalOpen(false)}
         currentEmoji={currentEmoji}
       />
+
+      {pendingImportFile && (
+        <ImportImageDialog
+          file={pendingImportFile}
+          onClose={() => setPendingImportFile(null)}
+          onImported={(slug) => {
+            setSelectedSlug(slug);
+            setLastExport(null);
+          }}
+        />
+      )}
     </div>
   );
 };

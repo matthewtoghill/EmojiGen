@@ -83,6 +83,11 @@ export async function decodeRasterImage(url: string): Promise<RasterImage> {
 
 const rasterCache = new Map<string, Promise<RasterImage>>();
 
+/** Drops a cached decode, e.g. for a temporary object URL. */
+export function evictRasterImage(url: string) {
+  rasterCache.delete(url);
+}
+
 /** Cached decodeRasterImage so every canvas shares one decoded copy per asset. */
 export function loadRasterImage(url: string): Promise<RasterImage> {
   let pending = rasterCache.get(url);
@@ -92,6 +97,178 @@ export function loadRasterImage(url: string): Promise<RasterImage> {
     rasterCache.set(url, pending);
   }
   return pending;
+}
+
+export interface RasterCleanup {
+  autoCrop: boolean;
+  removeBg: boolean;
+  /** 0-100: how far a pixel's colour may be from the background colour and still be removed */
+  bgTolerance: number;
+}
+
+const PROCESS_MAX_SIZE = 512;
+const ALPHA_EMPTY = 8;
+
+function createCanvas(w: number, h: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  return canvas;
+}
+
+/** Top-left pixel colour of the first frame, or null when it is transparent. */
+function sampleBackground(data: Uint8ClampedArray): [number, number, number] | null {
+  return data[3] < ALPHA_EMPTY ? null : [data[0], data[1], data[2]];
+}
+
+/**
+ * Clears background pixels connected to the image edges (flood fill), so matching colours
+ * inside the artwork (e.g. white eyes on a white background) are kept.
+ */
+export function clearConnectedBackground(
+  data: Uint8ClampedArray,
+  w: number,
+  h: number,
+  bg: [number, number, number],
+  tolerance: number
+) {
+  const limit = (tolerance / 100) * 255;
+  const isBg = (i: number) =>
+    data[i * 4 + 3] < ALPHA_EMPTY ||
+    Math.max(
+      Math.abs(data[i * 4] - bg[0]),
+      Math.abs(data[i * 4 + 1] - bg[1]),
+      Math.abs(data[i * 4 + 2] - bg[2])
+    ) <= limit;
+  const seen = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const visit = (i: number) => {
+    if (!seen[i] && isBg(i)) {
+      seen[i] = 1;
+      stack.push(i);
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    visit(x);
+    visit((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    visit(y * w);
+    visit(y * w + w - 1);
+  }
+  while (stack.length) {
+    const i = stack.pop()!;
+    data[i * 4 + 3] = 0;
+    const x = i % w;
+    if (x > 0) visit(i - 1);
+    if (x < w - 1) visit(i + 1);
+    if (i >= w) visit(i - w);
+    if (i < w * (h - 1)) visit(i + w);
+  }
+}
+
+/** Applies background removal and auto-crop to every frame. Crop uses the union of all frames so animation stays aligned. */
+export function cleanupRasterImage(src: RasterImage, opts: RasterCleanup): RasterImage {
+  const scale = Math.min(1, PROCESS_MAX_SIZE / Math.max(src.width, src.height));
+  const w = Math.max(1, Math.round(src.width * scale));
+  const h = Math.max(1, Math.round(src.height * scale));
+  const images = src.frames.map((frame) => {
+    const ctx = createCanvas(w, h).getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(frame, 0, 0, w, h);
+    return ctx.getImageData(0, 0, w, h);
+  });
+
+  const bg = opts.removeBg ? sampleBackground(images[0].data) : null;
+  if (bg) {
+    for (const img of images) clearConnectedBackground(img.data, w, h, bg, opts.bgTolerance);
+  }
+
+  let minX = 0;
+  let minY = 0;
+  let maxX = w - 1;
+  let maxY = h - 1;
+  if (opts.autoCrop) {
+    minX = w;
+    minY = h;
+    maxX = -1;
+    maxY = -1;
+    for (const { data } of images) {
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (data[(y * w + x) * 4 + 3] >= ALPHA_EMPTY) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+    }
+    if (maxX < 0) return src; // fully transparent: nothing to crop to
+  }
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const frames = images.map((img) => {
+    const canvas = createCanvas(cropW, cropH);
+    canvas.getContext('2d')!.putImageData(img, -minX, -minY);
+    return canvas;
+  });
+  return { frames, ends: src.ends, width: cropW, height: cropH };
+}
+
+// ponytail: small per-image cache (4 cleanup settings), so slider drags and exports reuse work
+const cleanupCache = new WeakMap<RasterImage, { key: string; result: RasterImage }[]>();
+
+function getCleanedRaster(src: RasterImage, params: ParamValues): RasterImage {
+  const opts: RasterCleanup = {
+    autoCrop: params.autoCrop === true,
+    removeBg: params.removeBg === true,
+    bgTolerance: Number(params.bgTolerance ?? 15),
+  };
+  if (!opts.autoCrop && !opts.removeBg) return src;
+  const key = `${opts.autoCrop}|${opts.removeBg}|${opts.removeBg ? opts.bgTolerance : ''}`;
+  const entries = cleanupCache.get(src) ?? [];
+  let hit = entries.find((e) => e.key === key);
+  if (!hit) {
+    hit = { key, result: cleanupRasterImage(src, opts) };
+    entries.unshift(hit);
+    entries.length = Math.min(entries.length, 4);
+    cleanupCache.set(src, entries);
+  }
+  return hit.result;
+}
+
+let outlineScratch: HTMLCanvasElement | null = null;
+
+/** Die-cut sticker outline: stamps a solid-colour silhouette of the frame in rings around it. */
+function drawShapeOutline(
+  ctx: CanvasRenderingContext2D,
+  frame: CanvasImageSource,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  width: number,
+  color: string
+) {
+  outlineScratch ??= document.createElement('canvas');
+  const scratch = outlineScratch;
+  // 2x the virtual size keeps the silhouette sharp on the HiDPI preview without huge source images
+  scratch.width = Math.max(1, Math.ceil(w * 2));
+  scratch.height = Math.max(1, Math.ceil(h * 2));
+  const sctx = scratch.getContext('2d')!;
+  sctx.drawImage(frame, 0, 0, scratch.width, scratch.height);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = color;
+  sctx.fillRect(0, 0, scratch.width, scratch.height);
+  const steps = 16;
+  for (let r = width; r > 0; r -= 1.5) {
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      ctx.drawImage(scratch, x + Math.cos(a) * r, y + Math.sin(a) * r, w, h);
+    }
+  }
 }
 
 /**
@@ -253,14 +430,18 @@ export function renderEmojiFrame(
       params,
     });
   } else if (rasterImage && rasterImage.width > 0) {
+    const raster = getCleanedRaster(rasterImage, params);
     const pad = Number(params.padding ?? 4);
     const radius = Number(params.cornerRadius ?? 0);
     const borderW = Number(params.borderWidth ?? 0);
     const borderColor = String(params.borderColor ?? '#ffffff');
+    // Older imports have no outlineStyle and keep the box outline
+    const shapeOutline = params.outlineStyle === 'shape';
 
-    const drawBox = VIRTUAL_SIZE - pad * 2;
-    const imgAspect = rasterImage.width / rasterImage.height;
-    const { ends } = rasterImage;
+    // The shape outline grows outward, so leave room for it inside the canvas
+    const drawBox = VIRTUAL_SIZE - pad * 2 - (shapeOutline ? borderW * 2 : 0);
+    const imgAspect = raster.width / raster.height;
+    const { ends } = raster;
     const frameMs = t * ends[ends.length - 1];
     const frameIdx = Math.max(0, ends.findIndex((end) => frameMs < end));
     let drawW = drawBox;
@@ -273,15 +454,20 @@ export function renderEmojiFrame(
     const drawX = (VIRTUAL_SIZE - drawW) / 2;
     const drawY = (VIRTUAL_SIZE - drawH) / 2;
 
+    const frame = raster.frames[frameIdx];
+    if (shapeOutline && borderW > 0) {
+      drawShapeOutline(targetCtx, frame, drawX, drawY, drawW, drawH, borderW, borderColor);
+    }
+
     targetCtx.save();
     if (radius > 0) {
       drawRoundedRect(targetCtx, drawX, drawY, drawW, drawH, radius);
       targetCtx.clip();
     }
-    targetCtx.drawImage(rasterImage.frames[frameIdx], drawX, drawY, drawW, drawH);
+    targetCtx.drawImage(frame, drawX, drawY, drawW, drawH);
     targetCtx.restore();
 
-    if (borderW > 0) {
+    if (!shapeOutline && borderW > 0) {
       targetCtx.save();
       targetCtx.strokeStyle = borderColor;
       targetCtx.lineWidth = borderW;

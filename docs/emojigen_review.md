@@ -59,11 +59,11 @@ This needs no LLM round trip and reuses the existing Studio FX.
 - Add a "variant matrix": pick one parameter (for example, color) and export every option as a separate emoji (`party-blob-red`, `party-blob-blue`, …).
 - Optionally add a Slack upload helper. Note that `admin.emoji.add` only works on Enterprise Grid. For other workspaces, link to the `/customize/emoji` page.
 
-### 6. Better image import
-- **Animated GIF import:** decode the frames (gifenc's sibling `gifuct-js` can do this) and map them to `t`. Today only the first frame is drawn.
-- **Auto-crop:** trim transparent borders and remove a solid background with a color-key tolerance slider.
-- **Image FX:** add an outline/sticker stroke around the shape, not just around the bounding box. A die-cut outline greatly improves legibility at 22 px.
-- **Size checks:** warn on very large uploads and downscale them on the client before sending.
+### ✅ 6. Better image import *(Completed: import dialog in [ImportImageDialog.tsx](file:///C:/Repos/EmojiGen/src/components/ImportImageDialog.tsx))*
+- ~~**Animated GIF import:** decode the frames (gifenc's sibling `gifuct-js` can do this) and map them to `t`. Today only the first frame is drawn.~~ ✅ *Completed* (`decodeRasterImage` in [renderer.ts](file:///C:/Repos/EmojiGen/src/lib/renderer.ts) decodes frames with WebCodecs `ImageDecoder` and picks the frame from `t`. Multi-frame imports are saved as `animated` with the source loop length and FPS. Browsers without `ImageDecoder` fall back to the first frame)
+- ~~**Auto-crop:** trim transparent borders and remove a solid background with a color-key tolerance slider.~~ ✅ *Completed* (`autoCrop`, `removeBg` and `bgTolerance` params, applied live by `cleanupRasterImage` in [renderer.ts](file:///C:/Repos/EmojiGen/src/lib/renderer.ts). Background removal flood-fills from the edges, so matching colours inside the artwork are kept. The original file is never changed)
+- ~~**Image FX:** add an outline/sticker stroke around the shape, not just around the bounding box. A die-cut outline greatly improves legibility at 22 px.~~ ✅ *Completed* (`outlineStyle: 'shape'` draws a die-cut outline that follows the silhouette; older imports keep the box outline)
+- ~~**Size checks:** warn on very large uploads and downscale them on the client before sending.~~ ✅ *Completed* (the dialog offers to shrink large still images to a 512 px PNG, warns about large or long animated files, and blocks files over the ~7 MB upload limit)
 
 ### 7. Layer and combine emojis, chain motions
 - Stack multiple emojis or images with per-layer position, scale, and FX (for example, the party blob holding the LGTM stamp).

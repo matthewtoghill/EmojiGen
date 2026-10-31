@@ -6,6 +6,17 @@ import { slugify } from './src/lib/slug';
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
+/** Overrides defaults with same-typed values from the request, ignoring unknown keys. */
+function pickKnownParams<T extends Record<string, unknown>>(defaults: T, overrides: unknown): T {
+  const result: Record<string, unknown> = { ...defaults };
+  if (overrides && typeof overrides === 'object') {
+    for (const [key, value] of Object.entries(overrides)) {
+      if (key in defaults && typeof value === typeof defaults[key]) result[key] = value;
+    }
+  }
+  return result as T;
+}
+
 class HttpError extends Error {
   statusCode: number;
   constructor(statusCode: number, message: string) {
@@ -294,13 +305,43 @@ export function emojiFsPlugin(): Plugin {
                   type: 'color',
                   label: 'Outline Color',
                 },
+                outlineStyle: {
+                  type: 'select',
+                  label: 'Outline Style',
+                  options: [
+                    { label: 'Follow shape (sticker)', value: 'shape' },
+                    { label: 'Box', value: 'box' },
+                  ],
+                },
+                autoCrop: {
+                  type: 'boolean',
+                  label: 'Trim Empty Borders',
+                },
+                removeBg: {
+                  type: 'boolean',
+                  label: 'Remove Background',
+                },
+                bgTolerance: {
+                  type: 'number',
+                  label: 'Background Tolerance',
+                  min: 0,
+                  max: 60,
+                  step: 1,
+                },
               },
-              defaultParams: {
-                padding: 4,
-                cornerRadius: 0,
-                borderWidth: 0,
-                borderColor: '#ffffff',
-              },
+              defaultParams: pickKnownParams(
+                {
+                  padding: 4,
+                  cornerRadius: 0,
+                  borderWidth: 0,
+                  borderColor: '#ffffff',
+                  outlineStyle: 'shape',
+                  autoCrop: true,
+                  removeBg: false,
+                  bgTolerance: 15,
+                },
+                body.defaultParams
+              ),
               modifiers: body.modifiers || undefined,
             };
 
