@@ -5,6 +5,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { loadAllEmojis } from './emojiRegistry';
 import { renderEmojiFrame } from './renderer';
 import { exportEmojiToGif } from './exporter';
+import { isSeamless, loopSeam } from './legibility';
 import { DEFAULT_UNIVERSAL_MODIFIERS, type LoadedEmoji } from '../types/emoji';
 
 const SIZE = 128;
@@ -38,15 +39,6 @@ function renderPixels(emoji: LoadedEmoji, t: number): Uint8ClampedArray {
   return ctx.getImageData(0, 0, SIZE, SIZE).data;
 }
 
-/** Fraction of channel values that differ by more than a small anti-aliasing tolerance */
-function diffRatio(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
-  let differing = 0;
-  for (let i = 0; i < a.length; i++) {
-    if (Math.abs(a[i] - b[i]) > 8) differing++;
-  }
-  return differing / a.length;
-}
-
 const emojis = loadAllEmojis().filter((e) => e.render);
 
 describe.each(emojis.map((e) => [e.slug, e] as const))('%s', (_slug, emoji) => {
@@ -61,11 +53,7 @@ describe.each(emojis.map((e) => [e.slug, e] as const))('%s', (_slug, emoji) => {
     // as the wrap-around step being much larger than every step inside the loop.
     const N = 36; // max exported frame count
     const frames = Array.from({ length: N }, (_, k) => renderPixels(emoji, k / N));
-    let maxInLoop = 0;
-    for (let k = 0; k < N - 1; k++) {
-      maxInLoop = Math.max(maxInLoop, diffRatio(frames[k], frames[k + 1]));
-    }
-    expect(diffRatio(frames[N - 1], frames[0])).toBeLessThanOrEqual(maxInLoop * 1.5 + 0.005);
+    expect(isSeamless(loopSeam(frames))).toBe(true);
   });
 
   it('exports a GIF within Slack’s 128 KB limit', async () => {

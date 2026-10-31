@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, Columns, Plus, Film, Loader2 } from 'lucide-react';
-import type { LoadedEmoji, ParamValues, UniversalModifiers } from '../types/emoji';
+import { Moon, Sun, Columns, Plus, Film, Loader2, CircleCheck, TriangleAlert, CircleX } from 'lucide-react';
+import { DEFAULT_UNIVERSAL_MODIFIERS, type LoadedEmoji, type ParamValues, type UniversalModifiers } from '../types/emoji';
 import type { PlaybackClock } from '../lib/animationClock';
 import { exportEmojiToGif } from '../lib/exporter';
+import { analyzeFrames, CHECK_FRAMES, renderCheckFrames, sizeCheck, type LegibilityCheck } from '../lib/legibility';
 import type { RasterImage } from '../lib/renderer';
 import { EmojiCanvas } from './EmojiCanvas';
 
 const EXPORT_PREVIEW_DEBOUNCE_MS = 600;
+
+const CHECK_STYLE = {
+  ok: { Icon: CircleCheck, color: 'text-emerald-600 dark:text-emerald-400' },
+  warn: { Icon: TriangleAlert, color: 'text-amber-600 dark:text-amber-400' },
+  fail: { Icon: CircleX, color: 'text-red-600 dark:text-red-400' },
+} as const;
 
 interface SlackPreviewProps {
   emoji: LoadedEmoji;
@@ -33,27 +40,47 @@ export const SlackPreview: React.FC<SlackPreviewProps> = ({
   const [exportError, setExportError] = useState<string | null>(null);
   const [isEncoding, setIsEncoding] = useState(false);
 
-  // Encode the real GIF (debounced) so the simulator shows exactly what Slack will get:
-  // hard alpha cutoff, reduced palette, and the exported frame timing.
+  const [checks, setChecks] = useState<LegibilityCheck[]>([]);
+
+  const merged = { ...DEFAULT_UNIVERSAL_MODIFIERS, ...(emoji.manifest.modifiers || {}), ...modifiers };
+  const animated = Boolean(emoji.manifest.animated) || merged.motion !== 'none';
+  const solidBackground = !merged.backgroundTransparent;
+  // Static emojis export as PNG, so the GIF is only needed for the toggle
+  const needGif = showExported || animated;
+
+  // Debounced: run the legibility checks and encode the real GIF, so the size estimate and the
+  // simulator show exactly what Slack will get (hard alpha cutoff, reduced palette, export timing).
   useEffect(() => {
-    if (!showExported) {
+    let cancelled = false;
+    if (!needGif) {
       setExported(null);
       setExportError(null);
-      setIsEncoding(false);
-      return;
     }
-    let cancelled = false;
-    setIsEncoding(true);
+    setIsEncoding(needGif);
     const timer = setTimeout(async () => {
+      let frameChecks: LegibilityCheck[] = [];
+      try {
+        const frames = renderCheckFrames(emoji, params, modifiers, rasterImage, animated ? CHECK_FRAMES : 1);
+        frameChecks = analyzeFrames(frames, { animated, solidBackground });
+      } catch {
+        // A broken renderer already shows on the stage; skip the checks rather than add noise
+      }
+      if (cancelled) return;
+      if (!needGif) {
+        setChecks(frameChecks);
+        return;
+      }
       try {
         const result = await exportEmojiToGif(emoji, params, modifiers, rasterImage);
         if (cancelled) return;
         setExported({ url: result.dataUrl, sizeKb: (result.sizeBytes / 1024).toFixed(1) });
         setExportError(null);
+        setChecks(animated ? [...frameChecks, sizeCheck(result.sizeBytes, result.optimizedNote)] : frameChecks);
       } catch (err: any) {
         if (cancelled) return;
         setExported(null);
         setExportError(err?.message || String(err));
+        setChecks(frameChecks);
       } finally {
         if (!cancelled) setIsEncoding(false);
       }
@@ -62,7 +89,7 @@ export const SlackPreview: React.FC<SlackPreviewProps> = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [showExported, emoji, params, modifiers, rasterImage]);
+  }, [needGif, animated, solidBackground, emoji, params, modifiers, rasterImage]);
 
   const renderEmoji = (size: number) =>
     showExported ? (
@@ -269,6 +296,22 @@ export const SlackPreview: React.FC<SlackPreviewProps> = ({
         {(themeMode === 'both' || themeMode === 'dark') && renderCard(true)}
         {(themeMode === 'both' || themeMode === 'light') && renderCard(false)}
       </div>
+
+      {checks.length > 0 && (
+        <ul aria-label="Legibility checks" className="mt-3 grid gap-1 sm:grid-cols-2 text-[11px]">
+          {checks.map((check) => {
+            const { Icon, color } = CHECK_STYLE[check.status];
+            return (
+              <li key={check.id} className="flex items-start gap-1.5 text-zinc-600 dark:text-zinc-400">
+                <Icon className={`w-3.5 h-3.5 shrink-0 mt-px ${color}`} aria-label={check.status} />
+                <span>
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">{check.label}:</span> {check.detail}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 };

@@ -27,7 +27,7 @@ export interface GifTimingPlan {
 
 const SLACK_MAX_BYTES = 128 * 1024; // 128 KB
 const EXPORT_SIZE = 128;
-const ALPHA_CUTOFF = 96;
+export const ALPHA_CUTOFF = 96;
 // Dark neutral matte (#1A1D21 Slack dark background) for smoothing semi-transparent edge pixels
 const MATTE_R = 26;
 const MATTE_G = 29;

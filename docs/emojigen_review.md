@@ -29,7 +29,7 @@ Today [LlmPromptModal.tsx](file:///C:/Repos/EmojiGen/src/components/LlmPromptMod
 - Keep a short chat in the app for follow-up edits ("make the eyes bigger"). Each request becomes a modify call with the current files attached.
 - Show a diff and offer one-click revert. LLM output can break a renderer, so this matters.
 
-### 2. Preview that matches the export, plus a legibility check
+### ✅ 2. Preview that matches the export, plus a legibility check *(Completed: [SlackPreview.tsx](file:///C:/Repos/EmojiGen/src/components/SlackPreview.tsx) and [legibility.ts](file:///C:/Repos/EmojiGen/src/lib/legibility.ts))*
 The Slack simulator draws the vector artwork live. The real GIF looks different: it has hard on/off transparency, a reduced color palette, and a fixed frame rate.
 - Add a **"Show exported result"** toggle. When on, the simulator plays the actual encoded GIF (in the background, debounced).
 - Run automatic checks and show them as warnings:
@@ -39,6 +39,12 @@ The Slack simulator draws the vector artwork live. The real GIF looks different:
   - **Loop seam:** pixel difference between the frame at t=0 and the frame at t≈1.
   - **File size:** a live estimate against the 128 KB limit.
 - These checks put the rules in AGENTS.md into the app, so human users get them too, not only the LLM.
+- **Status:** The toggle shipped with M3. The checks run 600 ms after the last edit on 24 rendered frames (1 for static emojis) and appear as a list under the Slack simulator. Only pixels that survive the GIF alpha cutoff count.
+  - **Canvas fill:** the larger side of the content's bounding box across all frames. Warns below 70%. Skipped when a solid background fills the canvas.
+  - **Edge margin:** the smallest gap to any edge across all frames. Warns below 2 px, because the artwork may clip.
+  - **Contrast:** the share of silhouette edge pixels with a pixel at 3:1 contrast or better against the background within 6 px, checked on each theme. The worst frame counts. Warns below 60%. A dark outline around a bright fill passes on both themes.
+  - **Loop seam:** the same rule as the test suite, which now imports it. Warns when the step from the last frame to the first is more than 1.5× the largest step inside the loop.
+  - **File size:** encodes the real GIF for every animated emoji, even with the toggle off. Fails over 128 KB and warns when the exporter had to cut frames or colours to fit. Static emojis export as PNG, so they skip this check.
 
 ### ✅ 3. Undo/redo, saved sessions, and shareable links *(Completed except shareable links: `src/lib/edits.ts`)*
 - All tweaks live in React state, so a refresh loses unsaved work. Store `customParamsBySlug` and `modifiersBySlug` in `localStorage`.
@@ -142,7 +148,7 @@ This needs no LLM round trip and reuses the existing Studio FX.
 #### ✅ M3. The preview does not match the exported file *(Completed)*
 - Anything semi-transparent appears in the preview but disappears in the GIF because of the alpha<110 cutoff. This includes the glitch scanlines (alpha 0.28), glows, shadows, and soft anti-aliasing.
 - The Slack simulator shows vector artwork rather than the real 128 px GIF scaled down, so small-size legibility looks better than it really is (see Idea 2).
-- **Status:** Fixed in [SlackPreview.tsx](file:///C:/Repos/EmojiGen/src/components/SlackPreview.tsx). A **Show exported result** toggle encodes the real GIF with `exportEmojiToGif` (debounced 600 ms after each edit) and shows it at 16, 22, 32, and 48 px in both Slack themes, with its size in KB. The exported GIF plays at its own frame rate rather than following the timeline scrubber. The automatic legibility checks from Idea 2 are not done.
+- **Status:** Fixed in [SlackPreview.tsx](file:///C:/Repos/EmojiGen/src/components/SlackPreview.tsx). A **Show exported result** toggle encodes the real GIF with `exportEmojiToGif` (debounced 600 ms after each edit) and shows it at 16, 22, 32, and 48 px in both Slack themes, with its size in KB. The exported GIF plays at its own frame rate rather than following the timeline scrubber. The automatic legibility checks from Idea 2 are also done.
 
 #### M4. Image-loading race conditions
 - The image-loading effects in [App.tsx:66-75](file:///C:/Repos/EmojiGen/src/App.tsx#L66-L75) and [EmojiCanvas.tsx:35-44](file:///C:/Repos/EmojiGen/src/components/EmojiCanvas.tsx#L35-L44) have no cleanup.
@@ -192,4 +198,4 @@ Each canvas sets `startTime = performance.now()` when the effect starts, so pres
 2. ~~**H1, M5:** shared animation clock; stop re-rendering the app every frame.~~ ✅ *Completed*
 3. ~~**H4, M2:** accurate GIF timing, one global palette, honest size messages.~~ ✅ *Completed*
 4. ~~**M1, M6:** error handling and slugs from the server.~~ ✅ *Completed* (M3 also done, via the exported-GIF toggle)
-5. Then Ideas 2 and 3 (cheap, high value), followed by Idea 1.
+5. ~~Then Ideas 2 and 3 (cheap, high value)~~ ✅ *Completed* (Idea 3 except shareable links), followed by Idea 1.
