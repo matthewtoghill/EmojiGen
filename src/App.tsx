@@ -18,6 +18,7 @@ import {
   GitCompare,
 } from 'lucide-react';
 import { loadAllEmojis } from './lib/emojiRegistry';
+import { decodeRasterImage, loadRasterImage, type RasterImage } from './lib/renderer';
 import {
   DEFAULT_UNIVERSAL_MODIFIERS,
   type LoadedEmoji,
@@ -326,7 +327,7 @@ export const App: React.FC = () => {
   const [isLlmModalOpen, setIsLlmModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [rasterImgElement, setRasterImgElement] = useState<HTMLImageElement | null>(null);
+  const [rasterImgElement, setRasterImgElement] = useState<RasterImage | null>(null);
 
   const currentEmoji: LoadedEmoji | undefined = useMemo(
     () => emojis.find((e) => e.slug === selectedSlug) || emojis[0],
@@ -339,14 +340,12 @@ export const App: React.FC = () => {
       return;
     }
     let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (!cancelled) {
-        setRasterImgElement(img);
-      }
-    };
-    img.src = currentEmoji.rasterUrl;
+    loadRasterImage(currentEmoji.rasterUrl).then(
+      (raster) => {
+        if (!cancelled) setRasterImgElement(raster);
+      },
+      () => {}
+    );
     return () => {
       cancelled = true;
     };
@@ -611,11 +610,24 @@ export const App: React.FC = () => {
         const dataUrl = String(reader.result || '');
         const baseName = file.name.replace(/\.[^.]+$/, '');
         const ext = file.name.split('.').pop() || 'png';
+        // Animated GIF/WebP/APNG: keep the source loop length and frame rate
+        const objectUrl = URL.createObjectURL(file);
+        const raster = await decodeRasterImage(objectUrl).finally(() => URL.revokeObjectURL(objectUrl));
+        const frameCount = raster.frames.length;
+        const durationSec = raster.ends[frameCount - 1] / 1000;
+        const animated = frameCount > 1;
         const data = await apiPost<{ slug: string }>('/api/emojis/import-raster', {
           name: baseName,
           slug: baseName,
           ext,
           dataUrl,
+          animated,
+          modifiers: animated
+            ? {
+                duration: Math.round(durationSec * 100) / 100,
+                fps: Math.max(8, Math.min(30, Math.round(frameCount / durationSec))),
+              }
+            : undefined,
         });
         setSelectedSlug(data.slug);
         setLastExport(null);

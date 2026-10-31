@@ -44,3 +44,20 @@ declare module 'gifenc' {
     format?: 'rgb565' | 'rgb444' | 'rgba4444'
   ): Uint8Array;
 }
+
+// WebCodecs ImageDecoder (not yet in TypeScript's DOM lib). Only the parts we use.
+interface ImageDecodeResult {
+  image: VideoFrame;
+}
+interface ImageDecoderInstance {
+  readonly completed: Promise<void>;
+  readonly tracks: { readonly selectedTrack: { readonly frameCount: number } | null };
+  decode(options?: { frameIndex?: number }): Promise<ImageDecodeResult>;
+  close(): void;
+}
+declare var ImageDecoder:
+  | {
+      new (init: { data: ReadableStream<Uint8Array> | BufferSource; type: string }): ImageDecoderInstance;
+      isTypeSupported(type: string): Promise<boolean>;
+    }
+  | undefined;

@@ -5,7 +5,7 @@ import {
   type ParamValues,
   type UniversalModifiers,
 } from '../types/emoji';
-import { renderEmojiFrame } from './renderer';
+import { renderEmojiFrame, type RasterImage } from './renderer';
 
 export interface ExportResult {
   blob: Blob;
@@ -111,7 +111,7 @@ export async function exportEmojiToPng(
   customParams: ParamValues,
   partialModifiers?: Partial<UniversalModifiers>,
   t: number = 0,
-  rasterImage?: HTMLImageElement | null
+  rasterImage?: RasterImage | null
 ): Promise<ExportResult> {
   const canvas = document.createElement('canvas');
   canvas.width = EXPORT_SIZE;
@@ -225,7 +225,7 @@ function encodeGifPass(
   frameCount: number,
   delayMs: number,
   maxColors: number,
-  rasterImage?: HTMLImageElement | null
+  rasterImage?: RasterImage | null
 ): Uint8Array {
   const canvas = document.createElement('canvas');
   canvas.width = EXPORT_SIZE;
@@ -414,7 +414,7 @@ export async function exportEmojiToGif(
   emoji: LoadedEmoji,
   customParams: ParamValues,
   partialModifiers?: Partial<UniversalModifiers>,
-  rasterImage?: HTMLImageElement | null
+  rasterImage?: RasterImage | null
 ): Promise<ExportResult> {
   const modifiers: UniversalModifiers = {
     ...DEFAULT_UNIVERSAL_MODIFIERS,

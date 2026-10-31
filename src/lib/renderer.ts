@@ -33,6 +33,67 @@ export function seededRandom(seed: number): number {
   return x - Math.floor(x);
 }
 
+/** Decoded raster asset: one frame for still images, several for animated GIF/WebP/APNG. */
+export interface RasterImage {
+  frames: CanvasImageSource[];
+  /** Cumulative end time of each frame in ms; the last entry is the loop length */
+  ends: number[];
+  width: number;
+  height: number;
+}
+
+/** Decodes every frame of an image URL. Falls back to a single frame where ImageDecoder is unavailable. */
+export async function decodeRasterImage(url: string): Promise<RasterImage> {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = url;
+  await img.decode();
+  const still: RasterImage = {
+    frames: [img],
+    ends: [1],
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+  };
+  if (typeof ImageDecoder === 'undefined') return still;
+
+  const blob = await (await fetch(url)).blob();
+  if (!blob.type || !(await ImageDecoder.isTypeSupported(blob.type))) return still;
+  const decoder = new ImageDecoder({ data: blob.stream(), type: blob.type });
+  try {
+    await decoder.completed;
+    const count = decoder.tracks.selectedTrack?.frameCount ?? 1;
+    if (count <= 1) return still;
+    const frames: CanvasImageSource[] = [];
+    const ends: number[] = [];
+    let elapsed = 0;
+    for (let i = 0; i < count; i++) {
+      const { image } = await decoder.decode({ frameIndex: i });
+      // Browsers play GIF delays under 20ms as 100ms; match that
+      const ms = (image.duration ?? 0) / 1000;
+      elapsed += ms < 20 ? 100 : ms;
+      frames.push(await createImageBitmap(image));
+      ends.push(elapsed);
+      image.close();
+    }
+    return { ...still, frames, ends };
+  } finally {
+    decoder.close();
+  }
+}
+
+const rasterCache = new Map<string, Promise<RasterImage>>();
+
+/** Cached decodeRasterImage so every canvas shares one decoded copy per asset. */
+export function loadRasterImage(url: string): Promise<RasterImage> {
+  let pending = rasterCache.get(url);
+  if (!pending) {
+    pending = decodeRasterImage(url);
+    pending.catch(() => rasterCache.delete(url));
+    rasterCache.set(url, pending);
+  }
+  return pending;
+}
+
 /**
  * Renders a single frame of an emoji at normalized progress `t` in [0, 1)
  * onto the target canvas context.
@@ -43,7 +104,7 @@ export function renderEmojiFrame(
   customParams: ParamValues,
   partialModifiers?: Partial<UniversalModifiers>,
   tRaw: number = 0,
-  rasterImage?: HTMLImageElement | null
+  rasterImage?: RasterImage | null
 ) {
   const modifiers: UniversalModifiers = {
     ...DEFAULT_UNIVERSAL_MODIFIERS,
@@ -191,14 +252,17 @@ export function renderEmojiFrame(
       height: VIRTUAL_SIZE,
       params,
     });
-  } else if (rasterImage && rasterImage.complete && rasterImage.naturalWidth > 0) {
+  } else if (rasterImage && rasterImage.width > 0) {
     const pad = Number(params.padding ?? 4);
     const radius = Number(params.cornerRadius ?? 0);
     const borderW = Number(params.borderWidth ?? 0);
     const borderColor = String(params.borderColor ?? '#ffffff');
 
     const drawBox = VIRTUAL_SIZE - pad * 2;
-    const imgAspect = rasterImage.naturalWidth / rasterImage.naturalHeight;
+    const imgAspect = rasterImage.width / rasterImage.height;
+    const { ends } = rasterImage;
+    const frameMs = t * ends[ends.length - 1];
+    const frameIdx = Math.max(0, ends.findIndex((end) => frameMs < end));
     let drawW = drawBox;
     let drawH = drawBox;
     if (imgAspect > 1) {
@@ -214,7 +278,7 @@ export function renderEmojiFrame(
       drawRoundedRect(targetCtx, drawX, drawY, drawW, drawH, radius);
       targetCtx.clip();
     }
-    targetCtx.drawImage(rasterImage, drawX, drawY, drawW, drawH);
+    targetCtx.drawImage(rasterImage.frames[frameIdx], drawX, drawY, drawW, drawH);
     targetCtx.restore();
 
     if (borderW > 0) {

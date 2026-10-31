@@ -264,7 +264,7 @@ export function emojiFsPlugin(): Plugin {
               shortcode: slug,
               description: `Imported image emoji (${assetFileName})`,
               tags: ['imported', 'raster'],
-              animated: false,
+              animated: body.animated === true,
               author: 'user-import',
               createdAt: new Date().toISOString(),
               rasterAsset: assetFileName,

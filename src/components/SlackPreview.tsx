@@ -3,6 +3,7 @@ import { Moon, Sun, Columns, Plus, Film, Loader2 } from 'lucide-react';
 import type { LoadedEmoji, ParamValues, UniversalModifiers } from '../types/emoji';
 import type { PlaybackClock } from '../lib/animationClock';
 import { exportEmojiToGif } from '../lib/exporter';
+import type { RasterImage } from '../lib/renderer';
 import { EmojiCanvas } from './EmojiCanvas';
 
 const EXPORT_PREVIEW_DEBOUNCE_MS = 600;
@@ -14,7 +15,7 @@ interface SlackPreviewProps {
   playing: boolean;
   scrubT: number;
   clock?: PlaybackClock;
-  rasterImage?: HTMLImageElement | null;
+  rasterImage?: RasterImage | null;
 }
 
 export const SlackPreview: React.FC<SlackPreviewProps> = ({

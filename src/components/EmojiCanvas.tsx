@@ -5,7 +5,7 @@ import {
   type ParamValues,
   type UniversalModifiers,
 } from '../types/emoji';
-import { renderEmojiFrame } from '../lib/renderer';
+import { loadRasterImage, renderEmojiFrame, type RasterImage } from '../lib/renderer';
 import {
   getEffectiveDurationMs,
   subscribeAnimationFrame,
@@ -45,7 +45,7 @@ export const EmojiCanvas: React.FC<EmojiCanvasProps> = ({
   className = '',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [rasterImg, setRasterImg] = useState<HTMLImageElement | null>(null);
+  const [rasterImg, setRasterImg] = useState<RasterImage | null>(null);
   const localTRef = useRef<number>(((scrubT % 1) + 1) % 1);
   const lastFrameIdxRef = useRef<number>(-1);
 
@@ -55,14 +55,12 @@ export const EmojiCanvas: React.FC<EmojiCanvasProps> = ({
       return;
     }
     let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (!cancelled) {
-        setRasterImg(img);
-      }
-    };
-    img.src = emoji.rasterUrl;
+    loadRasterImage(emoji.rasterUrl).then(
+      (raster) => {
+        if (!cancelled) setRasterImg(raster);
+      },
+      () => {}
+    );
     return () => {
       cancelled = true;
     };
